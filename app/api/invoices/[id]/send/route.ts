@@ -8,6 +8,8 @@ import { generatePdfBuffer } from "@/lib/pdf/generate-pdf";
 import { sendMail } from "@/lib/email";
 import { formatINR } from "@/lib/money";
 
+export const maxDuration = 30;
+
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },

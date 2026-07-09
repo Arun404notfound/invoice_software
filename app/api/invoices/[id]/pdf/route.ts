@@ -4,6 +4,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { renderInvoiceHtml } from "@/lib/pdf/render-invoice-html";
 import { generatePdfBuffer } from "@/lib/pdf/generate-pdf";
 
+// Chromium cold-start + render can exceed Vercel's default function
+// timeout; no effect outside Vercel.
+export const maxDuration = 30;
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },

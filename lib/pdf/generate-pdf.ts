@@ -1,15 +1,40 @@
-import puppeteer, { type Browser } from "puppeteer";
+import type { Browser } from "puppeteer-core";
 
 const globalForPuppeteer = globalThis as unknown as {
   puppeteerBrowser: Promise<Browser> | undefined;
 };
 
+/**
+ * Vercel's serverless functions can't run the full ~280MB Chromium that
+ * `puppeteer` bundles, so production launches via `puppeteer-core` +
+ * `@sparticuz/chromium` (a build made to fit that environment) instead.
+ * Locally, `@sparticuz/chromium`'s Linux-only binary won't run on a dev
+ * machine, so dev keeps using full `puppeteer`. `process.env.VERCEL` is
+ * set automatically by Vercel's build/runtime, not something we set.
+ */
+async function launchBrowser(): Promise<Browser> {
+  if (process.env.VERCEL) {
+    const [{ default: chromium }, puppeteerCore] = await Promise.all([
+      import("@sparticuz/chromium"),
+      import("puppeteer-core"),
+    ]);
+    return puppeteerCore.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  }
+
+  const puppeteer = await import("puppeteer");
+  return puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  }) as unknown as Promise<Browser>;
+}
+
 function getBrowser(): Promise<Browser> {
   if (!globalForPuppeteer.puppeteerBrowser) {
-    globalForPuppeteer.puppeteerBrowser = puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    globalForPuppeteer.puppeteerBrowser = launchBrowser();
   }
   return globalForPuppeteer.puppeteerBrowser;
 }

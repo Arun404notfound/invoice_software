@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { isSupabaseStorageConfigured, uploadToSupabaseStorage } from "@/lib/supabase";
 
 const ALLOWED_TYPES: Record<string, string> = {
   "image/png": "png",
@@ -41,11 +42,18 @@ export async function POST(request: Request) {
     );
   }
 
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-
   const filename = `${randomUUID()}.${extension}`;
   const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Supabase Storage in production (Vercel's filesystem isn't persistent);
+  // local disk in dev, so this keeps working without any Supabase account.
+  if (isSupabaseStorageConfigured()) {
+    const url = await uploadToSupabaseStorage(filename, buffer, file.type);
+    return NextResponse.json({ url });
+  }
+
+  const uploadsDir = path.join(process.cwd(), "public", "uploads");
+  await mkdir(uploadsDir, { recursive: true });
   await writeFile(path.join(uploadsDir, filename), buffer);
 
   return NextResponse.json({ url: `/uploads/${filename}` });

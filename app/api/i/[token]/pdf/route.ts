@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { renderInvoiceHtml } from "@/lib/pdf/render-invoice-html";
 import { generatePdfBuffer } from "@/lib/pdf/generate-pdf";
 
+export const maxDuration = 30;
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ token: string }> },

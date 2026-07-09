@@ -24,16 +24,39 @@ function formatDate(date: Date): string {
   return dateFormatter.format(date);
 }
 
+function mimeFromExtension(ext: string): string {
+  return ext === "svg" ? "image/svg+xml" : `image/${ext === "jpg" ? "jpeg" : ext}`;
+}
+
+/**
+ * Inlines an image as a base64 data URI so PDF rendering never depends on
+ * a live network fetch during the render itself (deterministic — same
+ * guarantee as not using Date.now()/Math.random() in the template).
+ * Handles both local disk paths (fully-local dev, `/uploads/...`) and full
+ * https URLs (Supabase Storage in production) — one function, two sources.
+ */
 async function localImageToDataUri(url: string | null): Promise<string | null> {
   if (!url) return null;
-  if (!url.startsWith("/uploads/")) return url;
+
   try {
-    const filePath = path.join(process.cwd(), "public", url);
-    const buffer = await readFile(filePath);
-    const ext = path.extname(url).slice(1).toLowerCase();
-    const mime =
-      ext === "svg" ? "image/svg+xml" : `image/${ext === "jpg" ? "jpeg" : ext}`;
-    return `data:${mime};base64,${buffer.toString("base64")}`;
+    if (url.startsWith("/uploads/")) {
+      const filePath = path.join(process.cwd(), "public", url);
+      const buffer = await readFile(filePath);
+      const ext = path.extname(url).slice(1).toLowerCase();
+      return `data:${mimeFromExtension(ext)};base64,${buffer.toString("base64")}`;
+    }
+
+    if (url.startsWith("http")) {
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      const contentType = response.headers.get("content-type");
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const ext = path.extname(new URL(url).pathname).slice(1).toLowerCase();
+      const mime = contentType ?? mimeFromExtension(ext);
+      return `data:${mime};base64,${buffer.toString("base64")}`;
+    }
+
+    return url;
   } catch {
     return null;
   }

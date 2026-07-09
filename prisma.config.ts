@@ -10,6 +10,12 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Supabase's pooled connection (used by the app at runtime, via
+    // DATABASE_URL) can't run Prisma Migrate reliably — PgBouncer in
+    // transaction mode doesn't support what Migrate needs. DIRECT_URL is
+    // Supabase's non-pooled connection, used only by this CLI config.
+    // Locally (no pooler in play) DIRECT_URL is unset, so this falls back
+    // to DATABASE_URL exactly as before.
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });
