@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: techgrah-invoice-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-techgrah}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-techgrah}
+      POSTGRES_DB: ${POSTGRES_DB:-techgrah_invoice}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - techgrah-invoice-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-techgrah}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  techgrah-invoice-db-data:

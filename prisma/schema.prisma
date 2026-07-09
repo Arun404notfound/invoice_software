@@ -1,0 +1,366 @@
+// Prisma schema for TechGrah Invoice & Billing
+// learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+  OVERDUE
+}
+
+enum PaymentMethod {
+  RAZORPAY
+  BANK_TRANSFER
+  UPI
+  CASH
+  OTHER
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum InvoiceTemplate {
+  CHARCOAL
+  CLASSIC
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+
+  sessions     Session[]
+  activityLogs ActivityLog[]
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Business profile (single row, single-tenant for now)
+// ---------------------------------------------------------------------------
+
+model BusinessProfile {
+  id     String @id @default(cuid())
+  legalName String
+  tradeName String?
+  gstin     String?
+  pan       String?
+
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  stateCode    String
+  pincode      String
+
+  email String
+  phone String
+
+  logoUrl      String?
+  signatureUrl String?
+
+  bankName      String?
+  accountNumber String?
+  ifsc          String?
+  upiId         String?
+
+  invoiceNumberFormat  String @default("TG/{FY}/{seq}")
+  brandColor           String @default("#10B981")
+  defaultTemplateId    InvoiceTemplate @default(CHARCOAL)
+  defaultTaxRatePercent Int    @default(18)
+  defaultDueDays       Int    @default(15)
+  defaultTermsText     String?
+  defaultNotesText     String?
+  exportDeclarationText String? @default("Supply meant for export under LUT without payment of IGST")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Clients
+// ---------------------------------------------------------------------------
+
+model Client {
+  id      String  @id @default(cuid())
+  name    String
+  company String?
+  email   String?
+  phone   String?
+  gstin   String?
+
+  billingAddressLine1 String?
+  billingAddressLine2 String?
+  city                String?
+  state               String?
+  stateCode           String?
+  pincode             String?
+
+  currency   String  @default("INR")
+  notes      String?
+  isArchived Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices   Invoice[]
+  quotations Quotation[]
+
+  @@index([isArchived])
+}
+
+// ---------------------------------------------------------------------------
+// Invoices
+// ---------------------------------------------------------------------------
+
+model Invoice {
+  id                     String        @id @default(cuid())
+  // Both null until Send — numbers are only allocated then, per the spec's
+  // "never reused, even for cancelled" rule: a discarded Draft must not
+  // burn a sequence number.
+  number                 String?       @unique
+  financialYear          String?
+  clientId               String
+  client                 Client        @relation(fields: [clientId], references: [id])
+  status                 InvoiceStatus @default(DRAFT)
+
+  issueDate              DateTime
+  dueDate                DateTime
+  placeOfSupplyStateCode String
+  isExport               Boolean  @default(false)
+
+  currency            String   @default("INR")
+  exchangeRateAtIssue Decimal? @db.Decimal(10, 4)
+
+  subtotalPaise   Int
+  discountPaise   Int @default(0)
+  cgstPaise       Int @default(0)
+  sgstPaise       Int @default(0)
+  igstPaise       Int @default(0)
+  roundOffPaise   Int @default(0)
+  totalPaise      Int
+  amountPaidPaise Int @default(0)
+
+  notes String?
+  terms String?
+
+  templateId InvoiceTemplate @default(CHARCOAL)
+
+  razorpayPaymentLinkId String?
+  publicShareToken      String  @unique @default(cuid())
+
+  sentAt         DateTime?
+  cancelledAt    DateTime?
+  remindersMuted Boolean   @default(false)
+
+  revisionOfId String?
+  revisionOf   Invoice?  @relation("InvoiceRevision", fields: [revisionOfId], references: [id])
+  revisedBy    Invoice[] @relation("InvoiceRevision")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineItems   InvoiceLineItem[]
+  payments    Payment[]
+  creditNotes CreditNote[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([financialYear])
+}
+
+model InvoiceLineItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  description String
+  hsnSacCode  String
+  quantity    Decimal @db.Decimal(12, 3)
+  unit        String
+
+  ratePaise       Int
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  taxRatePercent  Decimal @db.Decimal(5, 2)
+
+  taxableValuePaise Int
+  lineTotalPaise    Int
+  sortOrder         Int @default(0)
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id        String        @id @default(cuid())
+  invoiceId String
+  invoice   Invoice       @relation(fields: [invoiceId], references: [id])
+
+  amountPaise       Int
+  method            PaymentMethod
+  razorpayPaymentId String?
+  paidAt            DateTime
+  reference         String?
+  notes             String?
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Quotations (Phase 2)
+// ---------------------------------------------------------------------------
+
+model Quotation {
+  id            String          @id @default(cuid())
+  number        String          @unique
+  financialYear String
+  clientId      String
+  client        Client          @relation(fields: [clientId], references: [id])
+  status        QuotationStatus @default(DRAFT)
+
+  issueDate  DateTime
+  expiryDate DateTime?
+
+  subtotalPaise Int
+  discountPaise Int @default(0)
+  cgstPaise     Int @default(0)
+  sgstPaise     Int @default(0)
+  igstPaise     Int @default(0)
+  totalPaise    Int
+
+  notes String?
+  terms String?
+
+  convertedInvoiceId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineItems QuotationLineItem[]
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model QuotationLineItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  description String
+  hsnSacCode  String
+  quantity    Decimal @db.Decimal(12, 3)
+  unit        String
+
+  ratePaise       Int
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  taxRatePercent  Decimal @db.Decimal(5, 2)
+
+  taxableValuePaise Int
+  lineTotalPaise    Int
+  sortOrder         Int @default(0)
+
+  @@index([quotationId])
+}
+
+// ---------------------------------------------------------------------------
+// Credit notes (Phase 2)
+// ---------------------------------------------------------------------------
+
+model CreditNote {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  financialYear String
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+
+  issueDate DateTime
+  reason    String?
+
+  subtotalPaise Int
+  cgstPaise     Int @default(0)
+  sgstPaise     Int @default(0)
+  igstPaise     Int @default(0)
+  totalPaise    Int
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks & audit
+// ---------------------------------------------------------------------------
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String   @unique
+  payload     Json
+  processedAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  beforeJson Json?
+  afterJson  Json?
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// Sequential numbering (per financial year, row-locked in a transaction)
+// ---------------------------------------------------------------------------
+
+model Sequence {
+  key       String @id
+  lastValue Int    @default(0)
+}
