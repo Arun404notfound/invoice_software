@@ -34,7 +34,7 @@ export const businessProfileSchema = z.object({
     .string()
     .trim()
     .regex(/^#[0-9A-Fa-f]{6}$/, "Must be a hex color like #10B981"),
-  defaultTemplateId: z.enum(["CHARCOAL", "CLASSIC"]),
+  defaultTemplateId: z.enum(["CHARCOAL", "CLASSIC", "MODERN"]),
   defaultTaxRatePercent: z.number().int().min(0).max(100),
   defaultDueDays: z.number().int().min(0).max(365),
   defaultTermsText: z.string().trim().optional(),

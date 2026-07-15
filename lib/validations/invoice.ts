@@ -25,7 +25,7 @@ export const invoiceSchema = z.object({
   dueDate: z.string().min(1, "Due date is required"),
   placeOfSupplyStateCode: gstStateCodeSchema,
   isExport: z.boolean().default(false),
-  templateId: z.enum(["CHARCOAL", "CLASSIC"]),
+  templateId: z.enum(["CHARCOAL", "CLASSIC", "MODERN"]),
   overallDiscount: rupeeAmountStringSchema.default("0"),
   notes: z.string().trim().optional(),
   terms: z.string().trim().optional(),

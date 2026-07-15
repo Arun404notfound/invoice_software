@@ -24,6 +24,12 @@ import { GST_STATES } from "@/lib/constants/gst-states";
 import { describeApiError } from "@/lib/utils";
 import type { BusinessProfileInput } from "@/lib/validations/business-profile";
 
+const TEMPLATE_LABELS: Record<string, string> = {
+  CHARCOAL: "Charcoal (dark)",
+  CLASSIC: "Classic (light)",
+  MODERN: "Modern (banded)",
+};
+
 type ProfileFormState = {
   legalName: string;
   tradeName: string;
@@ -45,7 +51,7 @@ type ProfileFormState = {
   upiId: string;
   invoiceNumberFormat: string;
   brandColor: string;
-  defaultTemplateId: "CHARCOAL" | "CLASSIC";
+  defaultTemplateId: "CHARCOAL" | "CLASSIC" | "MODERN";
   defaultTaxRatePercent: string;
   defaultDueDays: string;
   defaultTermsText: string;
@@ -450,19 +456,18 @@ export function SettingsForm({
             <Select
               value={form.defaultTemplateId}
               onValueChange={(value) =>
-                update("defaultTemplateId", value as "CHARCOAL" | "CLASSIC")
+                update("defaultTemplateId", value as "CHARCOAL" | "CLASSIC" | "MODERN")
               }
             >
               <SelectTrigger id="defaultTemplateId" className="w-full">
                 <SelectValue>
-                  {(value: "CHARCOAL" | "CLASSIC" | null) =>
-                    value === "CLASSIC" ? "Classic (light)" : "Charcoal (dark)"
-                  }
+                  {(value: string | null) => TEMPLATE_LABELS[value ?? "CHARCOAL"]}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="CHARCOAL">Charcoal (dark)</SelectItem>
-                <SelectItem value="CLASSIC">Classic (light)</SelectItem>
+                <SelectItem value="CHARCOAL">{TEMPLATE_LABELS.CHARCOAL}</SelectItem>
+                <SelectItem value="CLASSIC">{TEMPLATE_LABELS.CLASSIC}</SelectItem>
+                <SelectItem value="MODERN">{TEMPLATE_LABELS.MODERN}</SelectItem>
               </SelectContent>
             </Select>
           </Field>

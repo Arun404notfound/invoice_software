@@ -29,6 +29,12 @@ import { describeApiError } from "@/lib/utils";
 import type { InvoiceInput } from "@/lib/validations/invoice";
 import { Trash2, Plus } from "lucide-react";
 
+const TEMPLATE_LABELS: Record<string, string> = {
+  CHARCOAL: "Charcoal (dark)",
+  CLASSIC: "Classic (light)",
+  MODERN: "Modern (banded)",
+};
+
 interface ClientOption {
   id: string;
   name: string;
@@ -56,7 +62,7 @@ interface SerializedInvoice {
   dueDate: string;
   placeOfSupplyStateCode: string;
   isExport: boolean;
-  templateId: "CHARCOAL" | "CLASSIC";
+  templateId: "CHARCOAL" | "CLASSIC" | "MODERN";
   notes: string | null;
   terms: string | null;
   discountPaise: number;
@@ -138,7 +144,6 @@ export function InvoiceBuilder({
   );
 
   const [isSaving, setIsSaving] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -236,49 +241,6 @@ export function InvoiceBuilder({
       setError("Something went wrong while saving. Please try again.");
     } finally {
       setIsSaving(false);
-    }
-  }
-
-  async function handleSend() {
-    if (
-      !window.confirm(
-        "Send this invoice? Once sent it is locked and cannot be edited — corrections require cancelling and re-issuing.",
-      )
-    ) {
-      return;
-    }
-    setIsSending(true);
-    setError(null);
-    try {
-      const saveResponse = await fetch(`/api/invoices/${invoice.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
-      });
-      if (!saveResponse.ok) {
-        const data = await saveResponse.json();
-        setError(describeApiError(data));
-        return;
-      }
-      const sendResponse = await fetch(`/api/invoices/${invoice.id}/send`, {
-        method: "POST",
-      });
-      const data = await sendResponse.json();
-      if (!sendResponse.ok) {
-        setError(describeApiError(data));
-        return;
-      }
-      if (data.warning) {
-        setError(data.warning);
-      }
-      router.refresh();
-    } catch {
-      // Covers non-JSON error responses (e.g. a framework-level crash page)
-      // that would otherwise throw inside response.json() and leave the
-      // user staring at a spinner that quietly stops with no explanation.
-      setError("Something went wrong while sending. Please try again.");
-    } finally {
-      setIsSending(false);
     }
   }
 
@@ -387,19 +349,18 @@ export function InvoiceBuilder({
             <Select
               value={templateId}
               onValueChange={(v) =>
-                v && !isReadOnly && setTemplateId(v as "CHARCOAL" | "CLASSIC")
+                v && !isReadOnly && setTemplateId(v as "CHARCOAL" | "CLASSIC" | "MODERN")
               }
             >
               <SelectTrigger id="templateId" className="w-full" disabled={isReadOnly}>
                 <SelectValue>
-                  {(value: string | null) =>
-                    value === "CLASSIC" ? "Classic (light)" : "Charcoal (dark)"
-                  }
+                  {(value: string | null) => TEMPLATE_LABELS[value ?? "CHARCOAL"]}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="CHARCOAL">Charcoal (dark)</SelectItem>
-                <SelectItem value="CLASSIC">Classic (light)</SelectItem>
+                <SelectItem value="CHARCOAL">{TEMPLATE_LABELS.CHARCOAL}</SelectItem>
+                <SelectItem value="CLASSIC">{TEMPLATE_LABELS.CLASSIC}</SelectItem>
+                <SelectItem value="MODERN">{TEMPLATE_LABELS.MODERN}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -682,9 +643,6 @@ export function InvoiceBuilder({
             </Button>
             <Button type="button" variant="outline" onClick={handlePreviewPdf}>
               Preview PDF
-            </Button>
-            <Button type="button" variant="secondary" onClick={handleSend} disabled={isSending}>
-              {isSending ? "Sending..." : "Send"}
             </Button>
           </>
         ) : (
