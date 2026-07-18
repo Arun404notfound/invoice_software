@@ -41,10 +41,9 @@ enum QuotationStatus {
   CONVERTED
 }
 
-enum InvoiceTemplate {
-  CHARCOAL
-  CLASSIC
-  MODERN
+enum SignatureStatus {
+  PENDING
+  SIGNED
 }
 
 // ---------------------------------------------------------------------------
@@ -91,8 +90,9 @@ model BusinessProfile {
   stateCode    String
   pincode      String
 
-  email String
-  phone String
+  email   String
+  phone   String
+  website String?
 
   logoUrl      String?
   signatureUrl String?
@@ -104,7 +104,6 @@ model BusinessProfile {
 
   invoiceNumberFormat  String @default("TG/{FY}/{seq}")
   brandColor           String @default("#10B981")
-  defaultTemplateId    InvoiceTemplate @default(CHARCOAL)
   defaultTaxRatePercent Int    @default(18)
   defaultDueDays       Int    @default(15)
   defaultTermsText     String?
@@ -182,10 +181,7 @@ model Invoice {
   notes String?
   terms String?
 
-  templateId InvoiceTemplate @default(CHARCOAL)
-
   razorpayPaymentLinkId String?
-  publicShareToken      String  @unique @default(cuid())
 
   sentAt         DateTime?
   cancelledAt    DateTime?
@@ -201,6 +197,7 @@ model Invoice {
   lineItems   InvoiceLineItem[]
   payments    Payment[]
   creditNotes CreditNote[]
+  signature   InvoiceSignature?
 
   @@index([clientId])
   @@index([status])
@@ -226,6 +223,42 @@ model InvoiceLineItem {
   sortOrder         Int @default(0)
 
   @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// DSC (Digital Signature Certificate) signing
+//
+// A signing round trip is two requests: `prepare` builds a PDF with an empty
+// signature placeholder and stores the exact bytes that need to be signed
+// (`gapPdf`, with the placeholder content removed -- see @signpdf/signpdf's
+// algorithm), then `complete` splices the CMS signature returned by the local
+// PKCS#11 bridge back into those exact bytes. Storing gapPdf server-side
+// (rather than regenerating it in `complete`) avoids relying on Puppeteer
+// producing byte-identical output across two separate requests.
+// ---------------------------------------------------------------------------
+
+model InvoiceSignature {
+  id        String           @id @default(cuid())
+  invoiceId String           @unique
+  invoice   Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  status    SignatureStatus  @default(PENDING)
+
+  // Set during `prepare`, consumed during `complete`.
+  gapPdf               Bytes?
+  contentsInsertOffset Int?
+  placeholderHexLength Int?
+  digestBase64         String?
+  signingTime          DateTime?
+
+  // Set once `complete` succeeds.
+  signedPdf         Bytes?
+  signerName        String?
+  signerCertSubject String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------

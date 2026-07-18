@@ -29,12 +29,6 @@ import { describeApiError } from "@/lib/utils";
 import type { InvoiceInput } from "@/lib/validations/invoice";
 import { Trash2, Plus } from "lucide-react";
 
-const TEMPLATE_LABELS: Record<string, string> = {
-  CHARCOAL: "Charcoal (dark)",
-  CLASSIC: "Classic (light)",
-  MODERN: "Modern (banded)",
-};
-
 interface ClientOption {
   id: string;
   name: string;
@@ -62,12 +56,10 @@ interface SerializedInvoice {
   dueDate: string;
   placeOfSupplyStateCode: string;
   isExport: boolean;
-  templateId: "CHARCOAL" | "CLASSIC" | "MODERN";
   notes: string | null;
   terms: string | null;
   discountPaise: number;
   totalPaise: number;
-  publicShareToken: string;
   client: { id: string; name: string };
   lineItems: SerializedLineItem[];
 }
@@ -122,7 +114,6 @@ export function InvoiceBuilder({
     invoice.placeOfSupplyStateCode,
   );
   const [isExport, setIsExport] = useState(invoice.isExport);
-  const [templateId, setTemplateId] = useState(invoice.templateId);
   const [overallDiscount, setOverallDiscount] = useState(
     paiseToRupeeString(invoice.discountPaise),
   );
@@ -144,6 +135,9 @@ export function InvoiceBuilder({
   );
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isConfirmingFinalize, setIsConfirmingFinalize] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -204,7 +198,6 @@ export function InvoiceBuilder({
       dueDate,
       placeOfSupplyStateCode,
       isExport,
-      templateId,
       overallDiscount: overallDiscount || "0",
       notes: notes || undefined,
       terms: terms || undefined,
@@ -248,10 +241,108 @@ export function InvoiceBuilder({
     window.open(`/api/invoices/${invoice.id}/pdf`, "_blank");
   }
 
-  function handleCopyShareLink() {
-    const url = `${window.location.origin}/i/${invoice.publicShareToken}`;
-    navigator.clipboard.writeText(url);
-    setSuccessMessage("Share link copied.");
+  async function handleFinalize() {
+    setIsFinalizing(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}/finalize`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(describeApiError(data));
+        return;
+      }
+      setSuccessMessage("Invoice finalized.");
+      router.refresh();
+    } catch {
+      setError("Something went wrong while finalizing. Please try again.");
+    } finally {
+      setIsConfirmingFinalize(false);
+      setIsFinalizing(false);
+    }
+  }
+
+  async function handleSignPdf() {
+    setIsSigning(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const prepareResponse = await fetch(
+        `/api/invoices/${invoice.id}/sign/prepare`,
+        { method: "POST" },
+      );
+      const prepareData = await prepareResponse.json();
+      if (!prepareResponse.ok) {
+        setError(describeApiError(prepareData));
+        return;
+      }
+      const { sessionId, digestBase64, signingTime } = prepareData as {
+        sessionId: string;
+        digestBase64: string;
+        signingTime: string;
+      };
+
+      const signerUrl =
+        process.env.NEXT_PUBLIC_DSC_SIGNER_URL ?? "http://127.0.0.1:7734";
+      let signResult: {
+        signatureBase64: string;
+        signerName?: string;
+        signerCertSubject?: string;
+      };
+      try {
+        const signResponse = await fetch(`${signerUrl}/sign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ digestBase64, signingTime }),
+        });
+        if (!signResponse.ok) {
+          const signError = await signResponse.json().catch(() => null);
+          setError(
+            signError?.error ??
+              "The local DSC signer rejected the signing request.",
+          );
+          return;
+        }
+        signResult = await signResponse.json();
+      } catch {
+        setError(
+          "Couldn't reach the local DSC signer at " +
+            signerUrl +
+            ". Make sure it's running and your token is plugged in.",
+        );
+        return;
+      }
+
+      const completeResponse = await fetch(
+        `/api/invoices/${invoice.id}/sign/complete`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, ...signResult }),
+        },
+      );
+      if (!completeResponse.ok) {
+        const completeData = await completeResponse.json().catch(() => null);
+        setError(describeApiError(completeData));
+        return;
+      }
+
+      const blob = await completeResponse.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${(invoice.number ?? "draft").replace(/\//g, "-")}-signed.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      setSuccessMessage("Invoice signed and downloaded.");
+    } catch {
+      setError("Something went wrong while signing. Please try again.");
+    } finally {
+      setIsSigning(false);
+    }
   }
 
   return (
@@ -342,25 +433,6 @@ export function InvoiceBuilder({
                     {s.code} — {s.name}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Template" htmlFor="templateId">
-            <Select
-              value={templateId}
-              onValueChange={(v) =>
-                v && !isReadOnly && setTemplateId(v as "CHARCOAL" | "CLASSIC" | "MODERN")
-              }
-            >
-              <SelectTrigger id="templateId" className="w-full" disabled={isReadOnly}>
-                <SelectValue>
-                  {(value: string | null) => TEMPLATE_LABELS[value ?? "CHARCOAL"]}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="CHARCOAL">{TEMPLATE_LABELS.CHARCOAL}</SelectItem>
-                <SelectItem value="CLASSIC">{TEMPLATE_LABELS.CLASSIC}</SelectItem>
-                <SelectItem value="MODERN">{TEMPLATE_LABELS.MODERN}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -644,17 +716,52 @@ export function InvoiceBuilder({
             <Button type="button" variant="outline" onClick={handlePreviewPdf}>
               Preview PDF
             </Button>
+            {isConfirmingFinalize ? (
+              <span className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">
+                  Assigns a permanent invoice number; can&apos;t be edited after.
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleFinalize}
+                  disabled={isFinalizing}
+                >
+                  {isFinalizing ? "Finalizing..." : "Confirm"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsConfirmingFinalize(false)}
+                  disabled={isFinalizing}
+                >
+                  Cancel
+                </Button>
+              </span>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsConfirmingFinalize(true)}
+              >
+                Finalize Invoice
+              </Button>
+            )}
           </>
         ) : (
-          <>
-            <Button type="button" variant="outline" onClick={handlePreviewPdf}>
-              Download PDF
-            </Button>
-            <Button type="button" variant="outline" onClick={handleCopyShareLink}>
-              Copy Share Link
-            </Button>
-          </>
+          <Button type="button" variant="outline" onClick={handlePreviewPdf}>
+            Download PDF
+          </Button>
         )}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleSignPdf}
+          disabled={isSigning}
+        >
+          {isSigning ? "Signing..." : "Sign PDF (DSC)"}
+        </Button>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}

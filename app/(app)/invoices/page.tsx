@@ -23,7 +23,7 @@ export default async function InvoicesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
           <p className="text-sm text-muted-foreground">
-            Draft, send, and track invoices.
+            Draft, finalize, and track invoices.
           </p>
         </div>
         <Button nativeButton={false} render={<Link href="/invoices/new" />}>

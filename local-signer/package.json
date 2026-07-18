@@ -1,0 +1,29 @@
+{
+  "name": "dsc-local-signer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local bridge that signs invoice PDF digests with a physical DSC (USB PKCS#11 token). Runs on the machine the token is plugged into -- not on the deployed app's server.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "generate-test-cert": "tsx src/generate-test-cert.ts",
+    "list-slots": "tsx src/list-slots.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "asn1js": "^3.0.10",
+    "dotenv": "^17.4.2",
+    "pkijs": "^3.4.0"
+  },
+  "optionalDependencies": {
+    "graphene-pk11": "^2.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "node-forge": "^1.4.0",
+    "@types/node-forge": "^1.3.13",
+    "tsx": "^4.23.0",
+    "typescript": "^5"
+  }
+}

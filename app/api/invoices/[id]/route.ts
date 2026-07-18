@@ -121,7 +121,6 @@ export async function PUT(
         dueDate: new Date(input.dueDate),
         placeOfSupplyStateCode: input.placeOfSupplyStateCode,
         isExport: input.isExport,
-        templateId: input.templateId,
         notes: input.notes,
         terms: input.terms,
         subtotalPaise: calc.subtotalPaise,

@@ -20,6 +20,7 @@ export const businessProfileSchema = z.object({
 
   email: z.string().trim().toLowerCase().email(),
   phone: z.string().trim().min(10, "Invalid phone number"),
+  website: z.string().trim().optional(),
 
   logoUrl: z.string().trim().optional(),
   signatureUrl: z.string().trim().optional(),
@@ -34,7 +35,6 @@ export const businessProfileSchema = z.object({
     .string()
     .trim()
     .regex(/^#[0-9A-Fa-f]{6}$/, "Must be a hex color like #10B981"),
-  defaultTemplateId: z.enum(["CHARCOAL", "CLASSIC", "MODERN"]),
   defaultTaxRatePercent: z.number().int().min(0).max(100),
   defaultDueDays: z.number().int().min(0).max(365),
   defaultTermsText: z.string().trim().optional(),

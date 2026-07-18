@@ -73,7 +73,6 @@ export async function POST(request: Request) {
       roundOffPaise: 0,
       totalPaise: 0,
       amountPaidPaise: 0,
-      templateId: businessProfile.defaultTemplateId,
       notes: businessProfile.defaultNotesText,
       terms: businessProfile.defaultTermsText,
     },

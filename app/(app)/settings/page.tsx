@@ -11,7 +11,7 @@ export default async function SettingsPage() {
           Business Settings
         </h1>
         <p className="text-sm text-muted-foreground">
-          This information appears on every invoice you send.
+          This information appears on every invoice you issue.
         </p>
       </div>
       <SettingsForm

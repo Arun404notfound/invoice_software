@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "dsc-local-signer",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "local-signer", "start"],
+      "port": 7734
     }
   ]
 }

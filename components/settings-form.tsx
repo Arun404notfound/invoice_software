@@ -24,12 +24,6 @@ import { GST_STATES } from "@/lib/constants/gst-states";
 import { describeApiError } from "@/lib/utils";
 import type { BusinessProfileInput } from "@/lib/validations/business-profile";
 
-const TEMPLATE_LABELS: Record<string, string> = {
-  CHARCOAL: "Charcoal (dark)",
-  CLASSIC: "Classic (light)",
-  MODERN: "Modern (banded)",
-};
-
 type ProfileFormState = {
   legalName: string;
   tradeName: string;
@@ -43,6 +37,7 @@ type ProfileFormState = {
   pincode: string;
   email: string;
   phone: string;
+  website: string;
   logoUrl: string;
   signatureUrl: string;
   bankName: string;
@@ -51,7 +46,6 @@ type ProfileFormState = {
   upiId: string;
   invoiceNumberFormat: string;
   brandColor: string;
-  defaultTemplateId: "CHARCOAL" | "CLASSIC" | "MODERN";
   defaultTaxRatePercent: string;
   defaultDueDays: string;
   defaultTermsText: string;
@@ -74,6 +68,7 @@ const EMPTY_STATE: ProfileFormState = {
   pincode: "",
   email: "",
   phone: "",
+  website: "",
   logoUrl: "",
   signatureUrl: "",
   bankName: "",
@@ -81,8 +76,7 @@ const EMPTY_STATE: ProfileFormState = {
   ifsc: "",
   upiId: "",
   invoiceNumberFormat: "TG/{FY}/{seq}",
-  brandColor: "#10B981",
-  defaultTemplateId: "CHARCOAL",
+  brandColor: "#1A56DB",
   defaultTaxRatePercent: "18",
   defaultDueDays: "15",
   defaultTermsText: "",
@@ -175,7 +169,6 @@ export function SettingsForm({
       upiId: form.upiId || undefined,
       invoiceNumberFormat: form.invoiceNumberFormat,
       brandColor: form.brandColor,
-      defaultTemplateId: form.defaultTemplateId,
       defaultTaxRatePercent: Number(form.defaultTaxRatePercent),
       defaultDueDays: Number(form.defaultDueDays),
       defaultTermsText: form.defaultTermsText || undefined,
@@ -332,6 +325,14 @@ export function SettingsForm({
               onChange={(e) => update("phone", e.target.value)}
             />
           </Field>
+          <Field label="Website" htmlFor="website">
+            <Input
+              id="website"
+              placeholder="www.example.com"
+              value={form.website}
+              onChange={(e) => update("website", e.target.value)}
+            />
+          </Field>
         </CardContent>
       </Card>
 
@@ -451,25 +452,6 @@ export function SettingsForm({
               value={form.invoiceNumberFormat}
               onChange={(e) => update("invoiceNumberFormat", e.target.value)}
             />
-          </Field>
-          <Field label="Default template" htmlFor="defaultTemplateId">
-            <Select
-              value={form.defaultTemplateId}
-              onValueChange={(value) =>
-                update("defaultTemplateId", value as "CHARCOAL" | "CLASSIC" | "MODERN")
-              }
-            >
-              <SelectTrigger id="defaultTemplateId" className="w-full">
-                <SelectValue>
-                  {(value: string | null) => TEMPLATE_LABELS[value ?? "CHARCOAL"]}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="CHARCOAL">{TEMPLATE_LABELS.CHARCOAL}</SelectItem>
-                <SelectItem value="CLASSIC">{TEMPLATE_LABELS.CLASSIC}</SelectItem>
-                <SelectItem value="MODERN">{TEMPLATE_LABELS.MODERN}</SelectItem>
-              </SelectContent>
-            </Select>
           </Field>
           <Field label="Default tax rate (%)" htmlFor="defaultTaxRatePercent">
             <Input

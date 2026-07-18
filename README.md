@@ -3,9 +3,16 @@
 GST-compliant invoicing and billing app for TechGrah Innovations. Next.js 16
 (App Router) + TypeScript strict + Prisma/PostgreSQL + Tailwind + shadcn/ui.
 
+**Runs entirely locally, for personal use — no hosting required.** There's
+no dependency on Vercel or Supabase; those only matter if you later decide
+to deploy this somewhere reachable outside your own machine. Everything
+below assumes you're running the app, its database, and (when signing
+invoices) the [DSC local signer](local-signer/README.md) all on the same
+machine — a Mac, since that's what the DSC token's driver targets.
+
 This repo is being built in delivery steps (see `Delivery status` below).
 Latest step covers: **clients, invoice builder, GST calculation, PDF
-generation, send/email, and the public share page.**
+generation, send/email, the public share page, and DSC PDF signing.**
 
 ## Stack
 
@@ -19,11 +26,8 @@ generation, send/email, and the public share page.**
 ## Prerequisites
 
 - Node.js 20+
-- PostgreSQL 16, either:
-  - **Docker Desktop** (recommended — `docker-compose.yml` is provided), or
-  - **A native local install** (what this repo was actually developed
-    against, since Docker Desktop's backend wasn't available in that
-    environment — see below)
+- PostgreSQL 16, installed natively (no Docker) — see step 3 below for the
+  exact commands on macOS
 - `npm install` downloads a bundled Chromium for Puppeteer (~200MB) — this
   is expected and only happens once.
 
@@ -44,23 +48,25 @@ generation, send/email, and the public share page.**
    Edit `.env` if you want non-default credentials. See [Environment
    variables](#environment-variables) below.
 
-3. **Start PostgreSQL**
+3. **Install and start PostgreSQL natively**
 
-   Option A — Docker Compose (matches `.env.example` defaults exactly):
+   On macOS, via [Homebrew](https://brew.sh):
 
    ```bash
-   docker compose up -d
+   brew install postgresql@16
+   brew services start postgresql@16
    ```
 
-   Option B — native install: install PostgreSQL 16, then create a role and
-   database matching your `.env`:
+   Then create a role and database matching your `.env` (defaults shown —
+   change if you edited `.env`):
 
-   ```sql
-   CREATE ROLE techgrah WITH LOGIN PASSWORD 'techgrah' CREATEDB;
-   CREATE DATABASE techgrah_invoice OWNER techgrah;
+   ```bash
+   createuser -s techgrah
+   psql -U techgrah -d postgres -c "ALTER ROLE techgrah WITH PASSWORD 'techgrah' CREATEDB;"
+   createdb -O techgrah techgrah_invoice
    ```
 
-   (`CREATEDB` is required on the role because `prisma migrate dev` creates
+   (`CREATEDB` on the role is required because `prisma migrate dev` creates
    a throwaway shadow database to diff against.)
 
 4. **Run migrations** (creates all tables from `prisma/schema.prisma`)
@@ -77,7 +83,7 @@ generation, send/email, and the public share page.**
 
    Admin login credentials come from `ADMIN_EMAIL` / `ADMIN_PASSWORD` in
    `.env` (defaults: `founder@techgrah.com` / `ChangeThisPassword123!` —
-   change these before using this anywhere but local dev).
+   change these before using this for real invoices).
 
 6. **Run the dev server**
 
@@ -87,6 +93,14 @@ generation, send/email, and the public share page.**
 
    Visit [http://localhost:3000](http://localhost:3000), sign in, and fill
    in your business profile under **Settings**.
+
+7. **(Only when you need to sign an invoice)** start the DSC local signer
+   alongside the dev server — see [local-signer/README.md](local-signer/README.md)
+   for the full setup (driver install, PIN entry, mock-vs-real-token modes):
+
+   ```bash
+   cd local-signer && npm start
+   ```
 
 ## Environment variables
 
@@ -177,6 +191,16 @@ template.
 - **GST**: `lib/constants/gst-states.ts` has the official 38 GST state/UT
   codes. GSTIN/PAN formats are validated with the regexes from the product
   spec (`lib/validations/common.ts`).
+- **DSC PDF signing** (`lib/pdf/signature/`, `app/api/invoices/[id]/sign/*`,
+  [`local-signer/`](local-signer/README.md)): the token holding the DSC
+  private key is a physical USB device, so the actual RSA signing operation
+  can't happen inside this app's server — it happens in a small separate
+  service (`local-signer/`) that talks to the token over PKCS#11. Signing is
+  a two-step handshake: `prepare` builds the PDF with an empty signature
+  placeholder and stores it server-side keyed by a session id (so the exact
+  bytes being signed don't depend on Puppeteer producing byte-identical
+  output twice), then `complete` splices the CMS/PKCS#7 signature `local-signer`
+  returned back into those stored bytes.
 
 ## Invoice status state machine
 
@@ -216,6 +240,7 @@ Invoices are immutable once `SENT`. Corrections happen via cancel + re-issue
 
 - [x] Schema + migrations + seed + auth + settings
 - [x] Clients + invoice builder + state machine + PDF + public page + email send
+- [x] DSC (Digital Signature Certificate) PDF signing — see [local-signer/README.md](local-signer/README.md)
 - [ ] Invoice list/detail + manual payments + dashboard
 - [ ] Razorpay links + webhooks + reminders
 - [ ] Recurring + quotations + credit notes + reports

@@ -13,7 +13,7 @@ const STATUS_STYLES: Record<InvoiceStatus, string> = {
 
 const STATUS_LABELS: Record<InvoiceStatus, string> = {
   DRAFT: "Draft",
-  SENT: "Sent",
+  SENT: "Finalized",
   VIEWED: "Viewed",
   PARTIALLY_PAID: "Partially Paid",
   PAID: "Paid",

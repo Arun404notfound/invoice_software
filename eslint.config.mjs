@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Separate standalone Node project with its own tooling/deps -- not
+    // part of the Next.js app.
+    "local-signer/**",
   ]),
 ]);
 
