@@ -52,9 +52,10 @@ export async function generateInvoiceNumber(
   tx: Prisma.TransactionClient,
   invoiceNumberFormat: string,
   date: Date = new Date(),
+  seriesKey: string = "invoice",
 ): Promise<{ number: string; financialYear: string }> {
   const financialYear = getFinancialYear(date);
-  const key = `invoice:${financialYear}`;
+  const key = `${seriesKey}:${financialYear}`;
   const seq = await allocateSequenceNumber(tx, key);
   const number = formatInvoiceNumber(invoiceNumberFormat, financialYear, seq);
   return { number, financialYear };

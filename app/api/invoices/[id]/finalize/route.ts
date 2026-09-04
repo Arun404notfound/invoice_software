@@ -46,10 +46,20 @@ export async function POST(
     );
   }
 
+  // Tax-free non-INR invoices are numbered in their own series so the
+  // domestic GST sequence stays gapless and contiguous.
+  const isDomestic = existing.currency === "INR";
+  const numberFormat = isDomestic
+    ? businessProfile.invoiceNumberFormat
+    : businessProfile.usdInvoiceNumberFormat;
+  const seriesKey = isDomestic ? "invoice" : "invoice:export";
+
   const invoice = await prisma.$transaction(async (tx) => {
     const { number, financialYear } = await generateInvoiceNumber(
       tx,
-      businessProfile.invoiceNumberFormat,
+      numberFormat,
+      new Date(),
+      seriesKey,
     );
     return tx.invoice.update({
       where: { id },

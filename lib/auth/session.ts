@@ -38,7 +38,13 @@ export async function setSessionCookie(
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // The desktop app runs a production build served over plain
+    // http://127.0.0.1, where a `Secure` cookie would be dropped by the
+    // browser and login would silently fail. DESKTOP_APP=1 (set only by
+    // Electron) relaxes this; web deployments still get Secure in prod.
+    secure:
+      process.env.NODE_ENV === "production" &&
+      process.env.DESKTOP_APP !== "1",
     sameSite: "lax",
     path: "/",
     expires: expiresAt,

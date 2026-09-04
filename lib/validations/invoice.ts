@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { gstStateCodeSchema, rupeeAmountStringSchema } from "./common";
+import { CURRENCY_CODES } from "@/lib/money";
+
+const currencySchema = z.enum(CURRENCY_CODES as [string, ...string[]]).default("INR");
 
 const percentStringSchema = z
   .string()
@@ -24,6 +27,7 @@ export const invoiceSchema = z.object({
   issueDate: z.string().min(1, "Issue date is required"),
   dueDate: z.string().min(1, "Due date is required"),
   placeOfSupplyStateCode: gstStateCodeSchema,
+  currency: currencySchema,
   isExport: z.boolean().default(false),
   overallDiscount: rupeeAmountStringSchema.default("0"),
   notes: z.string().trim().optional(),

@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "local-signer"]
+  "exclude": ["node_modules", "local-signer", "electron", "scripts", "dist"]
 }

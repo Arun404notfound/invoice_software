@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { formatINR } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
 
 export default async function InvoicesPage() {
   const invoices = await prisma.invoice.findMany({
@@ -11,6 +11,7 @@ export default async function InvoicesPage() {
       number: true,
       status: true,
       totalPaise: true,
+      currency: true,
       dueDate: true,
       client: { select: { name: true } },
     },
@@ -74,7 +75,7 @@ export default async function InvoicesPage() {
                     }).format(invoice.dueDate)}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    {formatINR(invoice.totalPaise)}
+                    {formatMoney(invoice.totalPaise, invoice.currency)}
                   </td>
                 </tr>
               ))}

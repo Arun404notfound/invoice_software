@@ -45,6 +45,7 @@ type ProfileFormState = {
   ifsc: string;
   upiId: string;
   invoiceNumberFormat: string;
+  usdInvoiceNumberFormat: string;
   brandColor: string;
   defaultTaxRatePercent: string;
   defaultDueDays: string;
@@ -76,6 +77,7 @@ const EMPTY_STATE: ProfileFormState = {
   ifsc: "",
   upiId: "",
   invoiceNumberFormat: "TG/{FY}/{seq}",
+  usdInvoiceNumberFormat: "TG/EXP/{FY}/{seq}",
   brandColor: "#1A56DB",
   defaultTaxRatePercent: "18",
   defaultDueDays: "15",
@@ -168,6 +170,7 @@ export function SettingsForm({
       ifsc: form.ifsc || undefined,
       upiId: form.upiId || undefined,
       invoiceNumberFormat: form.invoiceNumberFormat,
+      usdInvoiceNumberFormat: form.usdInvoiceNumberFormat,
       brandColor: form.brandColor,
       defaultTaxRatePercent: Number(form.defaultTaxRatePercent),
       defaultDueDays: Number(form.defaultDueDays),
@@ -446,11 +449,23 @@ export function SettingsForm({
           <CardTitle>Invoice Defaults</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Invoice number format" htmlFor="invoiceNumberFormat">
+          <Field label="Invoice number format (INR)" htmlFor="invoiceNumberFormat">
             <Input
               id="invoiceNumberFormat"
               value={form.invoiceNumberFormat}
               onChange={(e) => update("invoiceNumberFormat", e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Invoice number format (USD / export)"
+            htmlFor="usdInvoiceNumberFormat"
+          >
+            <Input
+              id="usdInvoiceNumberFormat"
+              value={form.usdInvoiceNumberFormat}
+              onChange={(e) =>
+                update("usdInvoiceNumberFormat", e.target.value)
+              }
             />
           </Field>
           <Field label="Default tax rate (%)" htmlFor="defaultTaxRatePercent">

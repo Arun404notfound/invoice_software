@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   formatINR,
   formatIndianNumber,
+  formatMoney,
+  formatMoneyNumber,
+  currencySymbol,
+  isTaxableCurrency,
+  roundInvoiceTotal,
+  toCurrencyCode,
   paiseToRupees,
   roundToNearestRupee,
   rupeesToPaise,
@@ -83,6 +89,78 @@ describe("formatINR", () => {
 describe("formatIndianNumber", () => {
   it("formats without a currency symbol", () => {
     expect(formatIndianNumber(12345600)).toBe("1,23,456.00");
+  });
+});
+
+describe("toCurrencyCode / isTaxableCurrency / currencySymbol", () => {
+  it("narrows known codes and falls back to INR", () => {
+    expect(toCurrencyCode("USD")).toBe("USD");
+    expect(toCurrencyCode("INR")).toBe("INR");
+    expect(toCurrencyCode("eur")).toBe("INR");
+    expect(toCurrencyCode(null)).toBe("INR");
+    expect(toCurrencyCode(undefined)).toBe("INR");
+  });
+
+  it("marks only INR as taxable", () => {
+    expect(isTaxableCurrency("INR")).toBe(true);
+    expect(isTaxableCurrency("USD")).toBe(false);
+  });
+
+  it("exposes the currency symbol", () => {
+    expect(currencySymbol("INR")).toBe("₹");
+    expect(currencySymbol("USD")).toBe("$");
+  });
+});
+
+describe("formatMoney", () => {
+  it("formats INR identically to formatINR (Indian grouping)", () => {
+    expect(formatMoney(12345600, "INR")).toBe("₹1,23,456.00");
+    expect(formatMoney(12345600, "INR")).toBe(formatINR(12345600));
+  });
+
+  it("formats USD with Western grouping and dollar sign", () => {
+    expect(formatMoney(12345600, "USD")).toBe("$123,456.00");
+    expect(formatMoney(500, "USD")).toBe("$5.00");
+    expect(formatMoney(0, "USD")).toBe("$0.00");
+  });
+
+  it("formats negative USD amounts", () => {
+    expect(formatMoney(-50050, "USD")).toBe("-$500.50");
+  });
+
+  it("falls back to INR for an unknown currency", () => {
+    expect(formatMoney(500, "EUR")).toBe(formatINR(500));
+  });
+
+  it("throws on non-integer minor units", () => {
+    expect(() => formatMoney(10.5, "USD")).toThrow(RangeError);
+  });
+});
+
+describe("formatMoneyNumber", () => {
+  it("drops the symbol", () => {
+    expect(formatMoneyNumber(12345600, "USD")).toBe("123,456.00");
+    expect(formatMoneyNumber(12345600, "INR")).toBe("1,23,456.00");
+  });
+});
+
+describe("roundInvoiceTotal", () => {
+  it("rounds INR to the nearest whole rupee", () => {
+    expect(roundInvoiceTotal(10050, "INR")).toEqual({
+      roundedPaise: 10100,
+      roundOffPaise: 50,
+    });
+  });
+
+  it("keeps USD cents exactly, with no round-off", () => {
+    expect(roundInvoiceTotal(10050, "USD")).toEqual({
+      roundedPaise: 10050,
+      roundOffPaise: 0,
+    });
+    expect(roundInvoiceTotal(999, "USD")).toEqual({
+      roundedPaise: 999,
+      roundOffPaise: 0,
+    });
   });
 });
 

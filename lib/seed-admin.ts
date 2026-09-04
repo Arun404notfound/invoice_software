@@ -54,6 +54,7 @@ export async function seedAdminAndBusinessProfile(): Promise<{
         ifsc: "HDFC0001234",
         upiId: "techgrah@okhdfcbank",
         invoiceNumberFormat: "TG/{FY}/{seq}",
+        usdInvoiceNumberFormat: "TG/EXP/{FY}/{seq}",
         brandColor: "#1A56DB",
         defaultTaxRatePercent: 18,
         defaultDueDays: 15,

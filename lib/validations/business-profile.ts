@@ -31,6 +31,11 @@ export const businessProfileSchema = z.object({
   upiId: z.string().trim().optional(),
 
   invoiceNumberFormat: z.string().trim().min(1).default("TG/{FY}/{seq}"),
+  usdInvoiceNumberFormat: z
+    .string()
+    .trim()
+    .min(1)
+    .default("TG/EXP/{FY}/{seq}"),
   brandColor: z
     .string()
     .trim()

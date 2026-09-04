@@ -4,6 +4,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isSupabaseStorageConfigured, uploadToSupabaseStorage } from "@/lib/supabase";
+import { getUploadsDir, uploadPublicPath } from "@/lib/uploads";
 
 const ALLOWED_TYPES: Record<string, string> = {
   "image/png": "png",
@@ -52,9 +53,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ url });
   }
 
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
+  const uploadsDir = getUploadsDir();
   await mkdir(uploadsDir, { recursive: true });
   await writeFile(path.join(uploadsDir, filename), buffer);
 
-  return NextResponse.json({ url: `/uploads/${filename}` });
+  return NextResponse.json({ url: uploadPublicPath(filename) });
 }

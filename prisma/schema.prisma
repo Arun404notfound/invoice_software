@@ -103,6 +103,9 @@ model BusinessProfile {
   upiId         String?
 
   invoiceNumberFormat  String @default("TG/{FY}/{seq}")
+  // Separate series for tax-free non-INR (USD / export) invoices so they're
+  // numbered independently of the domestic GST invoice sequence.
+  usdInvoiceNumberFormat String @default("TG/EXP/{FY}/{seq}")
   brandColor           String @default("#10B981")
   defaultTaxRatePercent Int    @default(18)
   defaultDueDays       Int    @default(15)

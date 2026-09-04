@@ -15,6 +15,11 @@ const eslintConfig = defineConfig([
     // Separate standalone Node project with its own tooling/deps -- not
     // part of the Next.js app.
     "local-signer/**",
+    // Electron main-process code (CommonJS, runs in Node, not the bundle)
+    // and one-off build scripts.
+    "electron/**",
+    "scripts/**",
+    "dist/**",
   ]),
 ]);
 

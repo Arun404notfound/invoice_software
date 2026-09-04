@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { GST_STATES } from "@/lib/constants/gst-states";
+import { CURRENCY_CODES, SUPPORTED_CURRENCIES } from "@/lib/money";
 import { describeApiError } from "@/lib/utils";
 import type { ClientInput } from "@/lib/validations/client";
 
@@ -165,11 +166,31 @@ export function ClientForm({
             />
           </Field>
           <Field label="Currency" htmlFor="currency">
-            <Input
-              id="currency"
+            <Select
               value={form.currency}
-              onChange={(e) => update("currency", e.target.value.toUpperCase())}
-            />
+              onValueChange={(value) => value && update("currency", value)}
+            >
+              <SelectTrigger id="currency" className="w-full">
+                <SelectValue>
+                  {(value: string | null) =>
+                    value
+                      ? `${value} — ${
+                          SUPPORTED_CURRENCIES[
+                            value as keyof typeof SUPPORTED_CURRENCIES
+                          ]?.label ?? value
+                        }`
+                      : null
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {CURRENCY_CODES.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {code} — {SUPPORTED_CURRENCIES[code].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
         </CardContent>
       </Card>

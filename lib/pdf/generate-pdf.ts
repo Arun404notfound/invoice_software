@@ -47,6 +47,28 @@ function getBrowser(): Promise<Browser> {
  * output is deterministic for a given input.
  */
 export async function generatePdfBuffer(html: string): Promise<Buffer> {
+  // Desktop app: render via the Electron main process (its own Chromium +
+  // webContents.printToPDF) instead of bundling a separate ~170MB Puppeteer
+  // Chromium. ELECTRON_PDF_URL / ELECTRON_PDF_SECRET are injected by
+  // electron/main.js; unset everywhere else, so dev/Vercel are unchanged.
+  const bridgeUrl = process.env.ELECTRON_PDF_URL;
+  if (bridgeUrl) {
+    const response = await fetch(bridgeUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-pdf-secret": process.env.ELECTRON_PDF_SECRET ?? "",
+      },
+      body: JSON.stringify({ html }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Electron PDF bridge failed: ${response.status} ${await response.text()}`,
+      );
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {

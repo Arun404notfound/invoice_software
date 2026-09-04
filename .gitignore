@@ -41,6 +41,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# electron-builder output + generated icon
+/dist
+/build/icon.png
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

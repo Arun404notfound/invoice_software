@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { amountInWordsFromPaise, numberToIndianWords } from "./amount-in-words";
+import {
+  amountInWordsForCurrency,
+  amountInWordsFromPaise,
+  numberToIndianWords,
+  numberToInternationalWords,
+} from "./amount-in-words";
 
 describe("numberToIndianWords", () => {
   it("handles zero", () => {
@@ -77,5 +82,48 @@ describe("amountInWordsFromPaise", () => {
   it("rejects negative and non-integer paise", () => {
     expect(() => amountInWordsFromPaise(-1)).toThrow(RangeError);
     expect(() => amountInWordsFromPaise(10.5)).toThrow(RangeError);
+  });
+});
+
+describe("numberToInternationalWords", () => {
+  it("handles zero and small numbers", () => {
+    expect(numberToInternationalWords(0)).toBe("Zero");
+    expect(numberToInternationalWords(56)).toBe("Fifty-Six");
+    expect(numberToInternationalWords(456)).toBe("Four Hundred Fifty-Six");
+  });
+
+  it("uses thousand / million / billion groupings", () => {
+    expect(numberToInternationalWords(1_000)).toBe("One Thousand");
+    expect(numberToInternationalWords(1_234_567)).toBe(
+      "One Million Two Hundred Thirty-Four Thousand Five Hundred Sixty-Seven",
+    );
+    expect(numberToInternationalWords(2_000_000_000)).toBe("Two Billion");
+  });
+
+  it("rejects negative and non-integer input", () => {
+    expect(() => numberToInternationalWords(-1)).toThrow(RangeError);
+    expect(() => numberToInternationalWords(1.5)).toThrow(RangeError);
+  });
+});
+
+describe("amountInWordsForCurrency", () => {
+  it("formats INR like the legacy helper", () => {
+    expect(amountInWordsForCurrency(1_23_456 * 100 + 78, "INR")).toBe(
+      "Rupees One Lakh Twenty-Three Thousand Four Hundred Fifty-Six and Seventy-Eight Paise Only",
+    );
+  });
+
+  it("formats USD with dollars, cents, and short-scale words", () => {
+    expect(amountInWordsForCurrency(0, "USD")).toBe("US Dollars Zero Only");
+    expect(amountInWordsForCurrency(123_456_789, "USD")).toBe(
+      "US Dollars One Million Two Hundred Thirty-Four Thousand Five Hundred Sixty-Seven and Eighty-Nine Cents Only",
+    );
+    expect(amountInWordsForCurrency(500_00, "USD")).toBe(
+      "US Dollars Five Hundred Only",
+    );
+  });
+
+  it("falls back to INR wording for an unknown currency", () => {
+    expect(amountInWordsForCurrency(100, "EUR")).toBe("Rupees One Only");
   });
 });

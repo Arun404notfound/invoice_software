@@ -109,6 +109,64 @@ describe("calculateInvoice — export mode", () => {
   });
 });
 
+describe("calculateInvoice — non-INR currency (tax-free)", () => {
+  it("charges no tax and keeps exact cents (no whole-unit round-off)", () => {
+    const result = calculateInvoice({
+      sellerStateCode: "27",
+      placeOfSupplyStateCode: "27",
+      isExport: false,
+      currency: "USD",
+      overallDiscountPaise: 0,
+      lineItems: [
+        {
+          quantity: "3",
+          ratePaise: 33_33, // $33.33 → line total $99.99
+          discountPercent: "0",
+          taxRatePercent: "18", // entered rate is ignored for non-INR
+        },
+      ],
+    });
+
+    expect(result.cgstPaise).toBe(0);
+    expect(result.sgstPaise).toBe(0);
+    expect(result.igstPaise).toBe(0);
+    expect(result.subtotalPaise).toBe(99_99);
+    expect(result.totalPaise).toBe(99_99);
+    expect(result.roundOffPaise).toBe(0);
+    expect(result.rateBreakdown).toEqual([
+      {
+        taxRatePercent: "0",
+        taxableValuePaise: 99_99,
+        cgstPaise: 0,
+        sgstPaise: 0,
+        igstPaise: 0,
+      },
+    ]);
+  });
+
+  it("still applies discounts for non-INR invoices", () => {
+    const result = calculateInvoice({
+      sellerStateCode: "27",
+      placeOfSupplyStateCode: "29",
+      isExport: false,
+      currency: "USD",
+      overallDiscountPaise: 10_00,
+      lineItems: [
+        {
+          quantity: "1",
+          ratePaise: 100_00,
+          discountPercent: "0",
+          taxRatePercent: "0",
+        },
+      ],
+    });
+
+    expect(result.subtotalPaise).toBe(100_00);
+    expect(result.discountPaise).toBe(10_00);
+    expect(result.totalPaise).toBe(90_00);
+  });
+});
+
 describe("calculateInvoice — per-line discount and fractional quantity", () => {
   it("applies per-line discount percent before tax", () => {
     const result = calculateInvoice({

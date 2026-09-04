@@ -4,10 +4,16 @@ import type {
   BusinessProfile,
   Prisma,
 } from "@/lib/generated/prisma/client";
-import { formatINR, formatIndianNumber } from "@/lib/money";
-import { amountInWordsFromPaise } from "@/lib/amount-in-words";
+import {
+  formatMoney,
+  formatMoneyNumber,
+  currencySymbol,
+  isTaxableCurrency,
+} from "@/lib/money";
+import { amountInWordsForCurrency } from "@/lib/amount-in-words";
 import { recalculateInvoice } from "@/lib/invoice-calc";
 import { GST_STATE_BY_CODE } from "@/lib/constants/gst-states";
+import { isMediaRouteUrl, resolveMediaPath } from "@/lib/uploads";
 
 export type InvoiceForPdf = Prisma.InvoiceGetPayload<{
   include: { client: true; lineItems: true };
@@ -40,6 +46,15 @@ async function localImageToDataUri(url: string | null): Promise<string | null> {
   if (!url) return null;
 
   try {
+    // Desktop app: uploads live outside `public/` (see lib/uploads.ts).
+    if (isMediaRouteUrl(url)) {
+      const filePath = resolveMediaPath(url);
+      if (!filePath) return null;
+      const buffer = await readFile(filePath);
+      const ext = path.extname(url).slice(1).toLowerCase();
+      return `data:${mimeFromExtension(ext)};base64,${buffer.toString("base64")}`;
+    }
+
     if (url.startsWith("/") && !url.startsWith("//")) {
       const filePath = path.join(process.cwd(), "public", url);
       const buffer = await readFile(filePath);
@@ -109,6 +124,10 @@ interface RateBreakdownRow {
 interface InvoiceViewModel {
   isSameStateSupply: boolean;
   isExport: boolean;
+  /** Non-INR invoice: billed tax-free, no GST fields on the document. */
+  isTaxFree: boolean;
+  currency: string;
+  currencySymbol: string;
   number: string;
   issueDate: string;
   dueDate: string;
@@ -184,9 +203,12 @@ async function buildViewModel(
   invoice: InvoiceForPdf,
   businessProfile: BusinessProfile,
 ): Promise<InvoiceViewModel> {
+  const currency = invoice.currency;
+  const isTaxFree = !isTaxableCurrency(currency);
   const calc = recalculateInvoice(businessProfile.stateCode, {
     placeOfSupplyStateCode: invoice.placeOfSupplyStateCode,
     isExport: invoice.isExport,
+    currency,
     discountPaise: invoice.discountPaise,
     lineItems: invoice.lineItems,
   });
@@ -199,6 +221,9 @@ async function buildViewModel(
   return {
     isSameStateSupply: businessProfile.stateCode === invoice.placeOfSupplyStateCode,
     isExport: invoice.isExport,
+    isTaxFree,
+    currency,
+    currencySymbol: currencySymbol(currency),
     number: invoice.number ?? "DRAFT",
     issueDate: formatDate(invoice.issueDate),
     dueDate: formatDate(invoice.dueDate),
@@ -245,29 +270,29 @@ async function buildViewModel(
       hsnSacCode: li.hsnSacCode,
       quantity: li.quantity.toString(),
       unit: li.unit,
-      rate: formatIndianNumber(li.ratePaise),
+      rate: formatMoneyNumber(li.ratePaise, currency),
       discountPercent: li.discountPercent.toString(),
-      taxableValue: formatIndianNumber(li.taxableValuePaise),
+      taxableValue: formatMoneyNumber(li.taxableValuePaise, currency),
       taxRatePercent: li.taxRatePercent.toString(),
-      lineTotal: formatIndianNumber(li.lineTotalPaise),
+      lineTotal: formatMoneyNumber(li.lineTotalPaise, currency),
     })),
     rateBreakdown: calc.rateBreakdown.map((b) => ({
       taxRatePercent: b.taxRatePercent,
-      taxableValue: formatIndianNumber(b.taxableValuePaise),
-      cgst: formatIndianNumber(b.cgstPaise),
-      sgst: formatIndianNumber(b.sgstPaise),
-      igst: formatIndianNumber(b.igstPaise),
+      taxableValue: formatMoneyNumber(b.taxableValuePaise, currency),
+      cgst: formatMoneyNumber(b.cgstPaise, currency),
+      sgst: formatMoneyNumber(b.sgstPaise, currency),
+      igst: formatMoneyNumber(b.igstPaise, currency),
     })),
-    subtotal: formatINR(invoice.subtotalPaise),
-    discount: formatINR(invoice.discountPaise),
+    subtotal: formatMoney(invoice.subtotalPaise, currency),
+    discount: formatMoney(invoice.discountPaise, currency),
     hasDiscount: invoice.discountPaise > 0,
-    cgst: formatINR(invoice.cgstPaise),
-    sgst: formatINR(invoice.sgstPaise),
-    igst: formatINR(invoice.igstPaise),
-    roundOff: formatINR(invoice.roundOffPaise),
+    cgst: formatMoney(invoice.cgstPaise, currency),
+    sgst: formatMoney(invoice.sgstPaise, currency),
+    igst: formatMoney(invoice.igstPaise, currency),
+    roundOff: formatMoney(invoice.roundOffPaise, currency),
     hasRoundOff: invoice.roundOffPaise !== 0,
-    total: formatINR(invoice.totalPaise),
-    amountInWords: amountInWordsFromPaise(invoice.totalPaise),
+    total: formatMoney(invoice.totalPaise, currency),
+    amountInWords: amountInWordsForCurrency(invoice.totalPaise, currency),
     notes: invoice.notes,
     terms: invoice.terms,
     exportDeclarationText: invoice.isExport
@@ -341,6 +366,10 @@ function professionalStyles(brand: string, dark: string): string {
 }
 
 function renderProfessionalItemsTable(vm: InvoiceViewModel): string {
+  const sym = vm.currencySymbol;
+  // Tax-free (non-INR) invoices drop the GST-only columns; the line's
+  // taxable value and amount are identical without tax, so only "Amount"
+  // is shown.
   return `
   <table class="pv-items mt-16">
     <thead>
@@ -350,11 +379,10 @@ function renderProfessionalItemsTable(vm: InvoiceViewModel): string {
         <th>HSN/SAC</th>
         <th class="right">Qty</th>
         <th>Unit</th>
-        <th class="right">Rate (₹)</th>
+        <th class="right">Rate (${sym})</th>
         <th class="right">Disc %</th>
-        <th class="right">Taxable Value (₹)</th>
-        <th class="right">Tax %</th>
-        <th class="right">Amount (₹)</th>
+        ${vm.isTaxFree ? "" : `<th class="right">Taxable Value (${sym})</th><th class="right">Tax %</th>`}
+        <th class="right">Amount (${sym})</th>
       </tr>
     </thead>
     <tbody>
@@ -369,8 +397,7 @@ function renderProfessionalItemsTable(vm: InvoiceViewModel): string {
         <td>${escapeHtml(li.unit)}</td>
         <td class="right">${li.rate}</td>
         <td class="right">${li.discountPercent}%</td>
-        <td class="right">${li.taxableValue}</td>
-        <td class="right">${li.taxRatePercent}%</td>
+        ${vm.isTaxFree ? "" : `<td class="right">${li.taxableValue}</td><td class="right">${li.taxRatePercent}%</td>`}
         <td class="right">${li.lineTotal}</td>
       </tr>`,
         )
@@ -380,7 +407,11 @@ function renderProfessionalItemsTable(vm: InvoiceViewModel): string {
 }
 
 function renderProfessionalBreakdown(vm: InvoiceViewModel): string {
-  if (vm.isExport || vm.rateBreakdown.every((b) => b.taxRatePercent === "0")) {
+  if (
+    vm.isTaxFree ||
+    vm.isExport ||
+    vm.rateBreakdown.every((b) => b.taxRatePercent === "0")
+  ) {
     return "";
   }
   return `
@@ -431,8 +462,8 @@ function renderProfessionalTotals(vm: InvoiceViewModel): string {
   <table class="pv-totals" style="width: 100%; max-width: 260px; margin-left: auto;">
     <tr><td class="label">Subtotal</td><td class="right">${vm.subtotal}</td></tr>
     ${vm.hasDiscount ? `<tr><td class="label">Discount</td><td class="right">-${vm.discount}</td></tr>` : ""}
-    ${vm.isSameStateSupply && !vm.isExport ? `<tr><td class="label">${cgstSgstLabel}</td><td class="right">${vm.cgst}</td></tr><tr><td class="label">${sgstLabel}</td><td class="right">${vm.sgst}</td></tr>` : ""}
-    ${!vm.isSameStateSupply && !vm.isExport ? `<tr><td class="label">${igstLabel}</td><td class="right">${vm.igst}</td></tr>` : ""}
+    ${!vm.isTaxFree && vm.isSameStateSupply && !vm.isExport ? `<tr><td class="label">${cgstSgstLabel}</td><td class="right">${vm.cgst}</td></tr><tr><td class="label">${sgstLabel}</td><td class="right">${vm.sgst}</td></tr>` : ""}
+    ${!vm.isTaxFree && !vm.isSameStateSupply && !vm.isExport ? `<tr><td class="label">${igstLabel}</td><td class="right">${vm.igst}</td></tr>` : ""}
     ${vm.hasRoundOff ? `<tr><td class="label">Round Off</td><td class="right">${vm.roundOff}</td></tr>` : ""}
     <tr class="pv-grand"><td>Grand Total</td><td class="right">${vm.total}</td></tr>
   </table>`;
@@ -533,12 +564,13 @@ function renderProfessionalTemplate(vm: InvoiceViewModel): string {
           ${vm.business.gstin ? `<div class="muted mt-16" style="font-size: 11px;">GSTIN: ${escapeHtml(vm.business.gstin)}</div>` : ""}
         </td>
         <td style="width: 45%; vertical-align: top;" class="right">
-          <div class="pv-title">TAX INVOICE</div>
+          <div class="pv-title">${vm.isTaxFree ? "INVOICE" : "TAX INVOICE"}</div>
           <table class="pv-kv-table pv-kv-align-right mt-16">
             <tr><td class="pv-kv-label">Invoice No.</td><td class="pv-kv-colon">:</td><td class="pv-kv-value pv-kv-value-strong">${escapeHtml(vm.number)}</td></tr>
             <tr><td class="pv-kv-label">Issue Date</td><td class="pv-kv-colon">:</td><td class="pv-kv-value pv-kv-value-strong">${vm.issueDate}</td></tr>
             <tr><td class="pv-kv-label">Due Date</td><td class="pv-kv-colon">:</td><td class="pv-kv-value pv-kv-value-strong">${vm.dueDate}</td></tr>
-            <tr><td class="pv-kv-label">Place of Supply</td><td class="pv-kv-colon">:</td><td class="pv-kv-value pv-kv-value-strong">${escapeHtml(vm.placeOfSupply)}</td></tr>
+            <tr><td class="pv-kv-label">Currency</td><td class="pv-kv-colon">:</td><td class="pv-kv-value pv-kv-value-strong">${escapeHtml(vm.currency)}</td></tr>
+            ${vm.isTaxFree ? "" : `<tr><td class="pv-kv-label">Place of Supply</td><td class="pv-kv-colon">:</td><td class="pv-kv-value pv-kv-value-strong">${escapeHtml(vm.placeOfSupply)}</td></tr>`}
           </table>
         </td>
       </tr>

@@ -24,7 +24,13 @@ import { StatusBadge } from "@/components/status-badge";
 import { GST_STATES } from "@/lib/constants/gst-states";
 import { SAC_CODE_SUGGESTIONS, UNIT_SUGGESTIONS } from "@/lib/constants/service-presets";
 import { calculateInvoice } from "@/lib/invoice-calc";
-import { rupeesToPaise, formatINR } from "@/lib/money";
+import {
+  rupeesToPaise,
+  formatMoney,
+  currencySymbol,
+  isTaxableCurrency,
+  CURRENCY_CODES,
+} from "@/lib/money";
 import { describeApiError } from "@/lib/utils";
 import type { InvoiceInput } from "@/lib/validations/invoice";
 import { Trash2, Plus } from "lucide-react";
@@ -55,6 +61,7 @@ interface SerializedInvoice {
   issueDate: string;
   dueDate: string;
   placeOfSupplyStateCode: string;
+  currency: string;
   isExport: boolean;
   notes: string | null;
   terms: string | null;
@@ -113,7 +120,13 @@ export function InvoiceBuilder({
   const [placeOfSupplyStateCode, setPlaceOfSupplyStateCode] = useState(
     invoice.placeOfSupplyStateCode,
   );
+  const [currency, setCurrency] = useState(invoice.currency ?? "INR");
   const [isExport, setIsExport] = useState(invoice.isExport);
+
+  // Non-INR invoices are billed tax-free: no GST, no place-of-supply, no
+  // per-line tax rate, no export toggle.
+  const taxExempt = !isTaxableCurrency(currency);
+  const symbol = currencySymbol(currency);
   const [overallDiscount, setOverallDiscount] = useState(
     paiseToRupeeString(invoice.discountPaise),
   );
@@ -146,19 +159,28 @@ export function InvoiceBuilder({
       return calculateInvoice({
         sellerStateCode,
         placeOfSupplyStateCode,
-        isExport,
+        isExport: taxExempt ? false : isExport,
+        currency,
         overallDiscountPaise: rupeesToPaise(overallDiscount || "0"),
         lineItems: lineItems.map((li) => ({
           quantity: li.quantity || "0",
           ratePaise: rupeesToPaise(li.rate || "0"),
           discountPercent: li.discountPercent || "0",
-          taxRatePercent: li.taxRatePercent || "0",
+          taxRatePercent: taxExempt ? "0" : li.taxRatePercent || "0",
         })),
       });
     } catch {
       return null;
     }
-  }, [sellerStateCode, placeOfSupplyStateCode, isExport, overallDiscount, lineItems]);
+  }, [
+    sellerStateCode,
+    placeOfSupplyStateCode,
+    isExport,
+    currency,
+    taxExempt,
+    overallDiscount,
+    lineItems,
+  ]);
 
   function updateLineItem<K extends keyof LineItemRow>(
     key: string,
@@ -197,7 +219,8 @@ export function InvoiceBuilder({
       issueDate,
       dueDate,
       placeOfSupplyStateCode,
-      isExport,
+      currency,
+      isExport: taxExempt ? false : isExport,
       overallDiscount: overallDiscount || "0",
       notes: notes || undefined,
       terms: terms || undefined,
@@ -208,7 +231,7 @@ export function InvoiceBuilder({
         unit: li.unit,
         rate: li.rate || "0",
         discountPercent: li.discountPercent || "0",
-        taxRatePercent: li.taxRatePercent || "0",
+        taxRatePercent: taxExempt ? "0" : li.taxRatePercent || "0",
       })),
     };
   }
@@ -370,6 +393,7 @@ export function InvoiceBuilder({
                 setClientId(v);
                 const client = clients.find((c) => c.id === v);
                 if (client?.stateCode) setPlaceOfSupplyStateCode(client.stateCode);
+                if (client?.currency) setCurrency(client.currency);
               }}
             >
               <SelectTrigger id="clientId" className="w-full" disabled={isReadOnly}>
@@ -407,46 +431,77 @@ export function InvoiceBuilder({
             />
           </Field>
           <Field
-            label="Place of supply"
-            htmlFor="placeOfSupplyStateCode"
-            caption="Your client's registered state — sets whether you charge CGST+SGST or IGST. Not a delivery address."
+            label="Currency"
+            htmlFor="currency"
+            caption={
+              taxExempt
+                ? "Non-INR invoices are billed tax-free — no GST is applied."
+                : "INR invoices carry GST. Switch to USD for tax-free billing."
+            }
           >
             <Select
-              value={placeOfSupplyStateCode}
-              onValueChange={(v) => v && !isReadOnly && setPlaceOfSupplyStateCode(v)}
+              value={currency}
+              onValueChange={(v) => v && !isReadOnly && setCurrency(v)}
             >
-              <SelectTrigger
-                id="placeOfSupplyStateCode"
-                className="w-full"
-                disabled={isReadOnly}
-              >
-                <SelectValue>
-                  {(value: string | null) => {
-                    const s = GST_STATES.find((s) => s.code === value);
-                    return s ? `${s.code} — ${s.name}` : null;
-                  }}
-                </SelectValue>
+              <SelectTrigger id="currency" className="w-full" disabled={isReadOnly}>
+                <SelectValue>{(value: string | null) => value}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {GST_STATES.map((s) => (
-                  <SelectItem key={s.code} value={s.code}>
-                    {s.code} — {s.name}
+                {CURRENCY_CODES.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {code}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
-          <div className="flex items-center gap-2 self-end pb-1.5">
-            <Checkbox
-              id="isExport"
-              checked={isExport}
-              disabled={isReadOnly}
-              onCheckedChange={(checked) => setIsExport(checked === true)}
-            />
-            <Label htmlFor="isExport" className="font-normal">
-              Export of Services (0% IGST)
-            </Label>
-          </div>
+          {!taxExempt ? (
+            <>
+              <Field
+                label="Place of supply"
+                htmlFor="placeOfSupplyStateCode"
+                caption="Your client's registered state — sets whether you charge CGST+SGST or IGST. Not a delivery address."
+              >
+                <Select
+                  value={placeOfSupplyStateCode}
+                  onValueChange={(v) =>
+                    v && !isReadOnly && setPlaceOfSupplyStateCode(v)
+                  }
+                >
+                  <SelectTrigger
+                    id="placeOfSupplyStateCode"
+                    className="w-full"
+                    disabled={isReadOnly}
+                  >
+                    <SelectValue>
+                      {(value: string | null) => {
+                        const s = GST_STATES.find((s) => s.code === value);
+                        return s ? `${s.code} — ${s.name}` : null;
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GST_STATES.map((s) => (
+                      <SelectItem key={s.code} value={s.code}>
+                        {s.code} — {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div className="flex items-center gap-2 self-end pb-1.5">
+                <Checkbox
+                  id="isExport"
+                  checked={isExport}
+                  disabled={isReadOnly}
+                  onCheckedChange={(checked) => setIsExport(checked === true)}
+                />
+                <Label htmlFor="isExport" className="font-normal">
+                  Export of Services (0% IGST)
+                </Label>
+              </div>
+            </>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -463,9 +518,11 @@ export function InvoiceBuilder({
                   <th className="px-2 py-1 font-medium">SAC Code</th>
                   <th className="px-2 py-1 font-medium">Qty</th>
                   <th className="px-2 py-1 font-medium">Unit</th>
-                  <th className="px-2 py-1 font-medium">Rate (₹)</th>
+                  <th className="px-2 py-1 font-medium">Rate ({symbol})</th>
                   <th className="px-2 py-1 font-medium">Disc %</th>
-                  <th className="px-2 py-1 font-medium">Tax %</th>
+                  {!taxExempt ? (
+                    <th className="px-2 py-1 font-medium">Tax %</th>
+                  ) : null}
                   {!isReadOnly ? <th className="px-2 py-1"></th> : null}
                 </tr>
               </thead>
@@ -535,16 +592,22 @@ export function InvoiceBuilder({
                         className="w-16"
                       />
                     </td>
-                    <td className="px-2 py-1">
-                      <Input
-                        value={row.taxRatePercent}
-                        disabled={isReadOnly}
-                        onChange={(e) =>
-                          updateLineItem(row.key, "taxRatePercent", e.target.value)
-                        }
-                        className="w-16"
-                      />
-                    </td>
+                    {!taxExempt ? (
+                      <td className="px-2 py-1">
+                        <Input
+                          value={row.taxRatePercent}
+                          disabled={isReadOnly}
+                          onChange={(e) =>
+                            updateLineItem(
+                              row.key,
+                              "taxRatePercent",
+                              e.target.value,
+                            )
+                          }
+                          className="w-16"
+                        />
+                      </td>
+                    ) : null}
                     {!isReadOnly ? (
                       <td className="flex items-center gap-1 px-2 py-1">
                         <Button
@@ -617,7 +680,7 @@ export function InvoiceBuilder({
           <CardTitle>Discount, Notes &amp; Terms</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Overall discount (₹)" htmlFor="overallDiscount">
+          <Field label={`Overall discount (${symbol})`} htmlFor="overallDiscount">
             <Input
               id="overallDiscount"
               value={overallDiscount}
@@ -657,13 +720,13 @@ export function InvoiceBuilder({
               <tbody>
                 <tr>
                   <td className="py-1 text-muted-foreground">Subtotal</td>
-                  <td className="py-1 text-right">{formatINR(calc.subtotalPaise)}</td>
+                  <td className="py-1 text-right">{formatMoney(calc.subtotalPaise, currency)}</td>
                 </tr>
                 {calc.discountPaise > 0 ? (
                   <tr>
                     <td className="py-1 text-muted-foreground">Discount</td>
                     <td className="py-1 text-right">
-                      -{formatINR(calc.discountPaise)}
+                      -{formatMoney(calc.discountPaise, currency)}
                     </td>
                   </tr>
                 ) : null}
@@ -671,31 +734,31 @@ export function InvoiceBuilder({
                   <>
                     <tr>
                       <td className="py-1 text-muted-foreground">CGST</td>
-                      <td className="py-1 text-right">{formatINR(calc.cgstPaise)}</td>
+                      <td className="py-1 text-right">{formatMoney(calc.cgstPaise, currency)}</td>
                     </tr>
                     <tr>
                       <td className="py-1 text-muted-foreground">SGST</td>
-                      <td className="py-1 text-right">{formatINR(calc.sgstPaise)}</td>
+                      <td className="py-1 text-right">{formatMoney(calc.sgstPaise, currency)}</td>
                     </tr>
                   </>
                 ) : null}
                 {calc.igstPaise > 0 ? (
                   <tr>
                     <td className="py-1 text-muted-foreground">IGST</td>
-                    <td className="py-1 text-right">{formatINR(calc.igstPaise)}</td>
+                    <td className="py-1 text-right">{formatMoney(calc.igstPaise, currency)}</td>
                   </tr>
                 ) : null}
                 {calc.roundOffPaise !== 0 ? (
                   <tr>
                     <td className="py-1 text-muted-foreground">Round Off</td>
                     <td className="py-1 text-right">
-                      {formatINR(calc.roundOffPaise)}
+                      {formatMoney(calc.roundOffPaise, currency)}
                     </td>
                   </tr>
                 ) : null}
                 <tr className="border-t border-border font-semibold">
                   <td className="pt-2">Total</td>
-                  <td className="pt-2 text-right">{formatINR(calc.totalPaise)}</td>
+                  <td className="pt-2 text-right">{formatMoney(calc.totalPaise, currency)}</td>
                 </tr>
               </tbody>
             </table>

@@ -1,5 +1,5 @@
 import Decimal from "decimal.js";
-import { roundToNearestRupee } from "./money";
+import { roundInvoiceTotal, isTaxableCurrency } from "./money";
 
 /**
  * Line-item and invoice-level GST calculation. Decimal.js is used only as
@@ -40,6 +40,17 @@ export interface InvoiceCalcInput {
   isExport: boolean;
   overallDiscountPaise: number;
   lineItems: LineItemCalcInput[];
+  /**
+   * ISO currency code. Non-INR currencies are billed tax-free and their
+   * totals are not rounded to a whole major unit. Defaults to "INR".
+   */
+  currency?: string;
+  /**
+   * Forces every line to 0% tax regardless of the entered rate, the same
+   * way `isExport` does. Set automatically for non-INR currencies; can also
+   * be passed explicitly. Defaults to false.
+   */
+  taxExempt?: boolean;
 }
 
 export interface InvoiceCalcResult {
@@ -59,6 +70,14 @@ export function calculateInvoice(input: InvoiceCalcInput): InvoiceCalcResult {
     throw new RangeError("overallDiscountPaise must not be negative");
   }
 
+  const currency = input.currency ?? "INR";
+  // Non-INR invoices are always tax-free; `taxExempt` / `isExport` also
+  // force 0% for INR (LUT export of services).
+  const taxExempt =
+    input.taxExempt === true ||
+    input.isExport ||
+    !isTaxableCurrency(currency);
+
   const isSameState = input.sellerStateCode === input.placeOfSupplyStateCode;
 
   const lineResults: LineItemCalcResult[] = [];
@@ -77,7 +96,7 @@ export function calculateInvoice(input: InvoiceCalcInput): InvoiceCalcResult {
     const taxableValueExact = lineBase.minus(lineDiscount);
     const taxableValuePaise = roundPaise(taxableValueExact);
 
-    const effectiveRate = input.isExport
+    const effectiveRate = taxExempt
       ? new Decimal(0)
       : new Decimal(line.taxRatePercent);
     const lineTaxPaise = roundPaise(
@@ -171,8 +190,10 @@ export function calculateInvoice(input: InvoiceCalcInput): InvoiceCalcResult {
 
   const preRoundTotal =
     subtotalPaise - input.overallDiscountPaise + cgstPaise + sgstPaise + igstPaise;
-  const { roundedPaise: totalPaise, roundOffPaise } =
-    roundToNearestRupee(preRoundTotal);
+  const { roundedPaise: totalPaise, roundOffPaise } = roundInvoiceTotal(
+    preRoundTotal,
+    currency,
+  );
 
   return {
     lineItems: lineResults,
@@ -195,6 +216,7 @@ export interface InvoiceLikeForRecalc {
   placeOfSupplyStateCode: string;
   isExport: boolean;
   discountPaise: number;
+  currency?: string;
   lineItems: {
     quantity: StringableDecimal | string;
     ratePaise: number;
@@ -219,6 +241,7 @@ export function recalculateInvoice(
     sellerStateCode,
     placeOfSupplyStateCode: invoice.placeOfSupplyStateCode,
     isExport: invoice.isExport,
+    currency: invoice.currency ?? "INR",
     overallDiscountPaise: invoice.discountPaise,
     lineItems: invoice.lineItems.map((li) => ({
       quantity: li.quantity.toString(),

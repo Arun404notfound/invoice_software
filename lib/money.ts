@@ -1,10 +1,88 @@
 /**
- * All money in this app is stored and computed as integer paise. Never use
- * floating point arithmetic on rupee amounts — these helpers are the only
- * place paise <-> rupee conversion and display formatting should happen.
+ * All money in this app is stored and computed as integer minor units
+ * (paise for INR, cents for USD — every supported currency has a 100-unit
+ * minor denomination). Never use floating point arithmetic on money
+ * amounts — these helpers are the only place minor-unit <-> major-unit
+ * conversion and display formatting should happen.
  */
 
 const RUPEE_STRING_PATTERN = /^-?\d+(\.\d{1,2})?$/;
+
+/**
+ * Currencies the app can invoice in. INR is the domestic GST currency;
+ * every other entry is billed tax-free (see `lib/invoice-calc.ts`). Each
+ * currency's minor unit is 1/100 of its major unit, so the integer
+ * "paise" storage model works unchanged.
+ */
+export const SUPPORTED_CURRENCIES = {
+  INR: { label: "Indian Rupee", symbol: "₹", locale: "en-IN", taxable: true },
+  USD: { label: "US Dollar", symbol: "$", locale: "en-US", taxable: false },
+} as const;
+
+export type CurrencyCode = keyof typeof SUPPORTED_CURRENCIES;
+
+export const CURRENCY_CODES = Object.keys(SUPPORTED_CURRENCIES) as CurrencyCode[];
+
+/** Narrows an arbitrary string to a supported currency, falling back to INR. */
+export function toCurrencyCode(value: string | null | undefined): CurrencyCode {
+  return value && value in SUPPORTED_CURRENCIES
+    ? (value as CurrencyCode)
+    : "INR";
+}
+
+/** Whether invoices in this currency carry GST/tax. Only INR does. */
+export function isTaxableCurrency(currency: string): boolean {
+  return SUPPORTED_CURRENCIES[toCurrencyCode(currency)].taxable;
+}
+
+/** The currency symbol, e.g. "₹" or "$". */
+export function currencySymbol(currency: string): string {
+  return SUPPORTED_CURRENCIES[toCurrencyCode(currency)].symbol;
+}
+
+/**
+ * Formats an integer minor-unit amount in the given currency, e.g.
+ * (12345600, "INR") -> "₹1,23,456.00", (12345600, "USD") -> "$123,456.00".
+ * Uses the currency's own locale so digit grouping matches convention
+ * (Indian 2-2-3 grouping for INR, Western 3-3-3 for USD).
+ */
+export function formatMoney(minorUnits: number, currency: string): string {
+  assertInteger(minorUnits);
+  const { locale } = SUPPORTED_CURRENCIES[toCurrencyCode(currency)];
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: toCurrencyCode(currency),
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(minorUnits / 100);
+}
+
+/** Same as `formatMoney` but without the currency symbol. */
+export function formatMoneyNumber(minorUnits: number, currency: string): string {
+  assertInteger(minorUnits);
+  const { locale } = SUPPORTED_CURRENCIES[toCurrencyCode(currency)];
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(minorUnits / 100);
+}
+
+/**
+ * Rounds a total to the currency's conventional invoice increment and
+ * returns the round-off delta. INR invoices round to the nearest whole
+ * rupee (the long-standing Indian practice); every other currency keeps
+ * its exact minor-unit value (no round-off line).
+ */
+export function roundInvoiceTotal(
+  minorUnits: number,
+  currency: string,
+): { roundedPaise: number; roundOffPaise: number } {
+  assertInteger(minorUnits);
+  if (toCurrencyCode(currency) === "INR") {
+    return roundToNearestRupee(minorUnits);
+  }
+  return { roundedPaise: minorUnits, roundOffPaise: 0 };
+}
 
 /**
  * Converts a rupee amount to integer paise. Prefer passing a `string` (as

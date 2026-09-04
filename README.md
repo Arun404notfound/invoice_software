@@ -12,7 +12,8 @@ machine — a Mac, since that's what the DSC token's driver targets.
 
 This repo is being built in delivery steps (see `Delivery status` below).
 Latest step covers: **clients, invoice builder, GST calculation, PDF
-generation, send/email, the public share page, and DSC PDF signing.**
+generation, send/email, the public share page, DSC PDF signing, USD
+(tax-free) billing, and a filterable dashboard.**
 
 ## Stack
 
@@ -26,8 +27,10 @@ generation, send/email, the public share page, and DSC PDF signing.**
 ## Prerequisites
 
 - Node.js 20+
-- PostgreSQL 16, installed natively (no Docker) — see step 3 below for the
-  exact commands on macOS
+- PostgreSQL 16+, installed natively (no Docker) — see step 3 below for the
+  exact commands on macOS. On Windows, the EnterpriseDB installer (or
+  `winget install PostgreSQL.PostgreSQL.17`) works; then create the role and
+  database with `psql` / `createdb` exactly as shown below.
 - `npm install` downloads a bundled Chromium for Puppeteer (~200MB) — this
   is expected and only happens once.
 
@@ -160,6 +163,25 @@ template.
   disk via a Route Handler using the native `request.formData()` API — no
   multipart-parsing library needed. This is the point where S3-compatible
   object storage would plug in for a production/multi-instance deployment.
+- **Multi-currency / USD billing**: an invoice's `currency` (defaulted from
+  the client, changeable while it's a Draft) drives everything. `INR` is the
+  domestic GST currency; every other currency (`USD` today, see
+  `SUPPORTED_CURRENCIES` in `lib/money.ts`) is billed **tax-free** — the
+  builder hides the place-of-supply, export toggle and per-line tax fields,
+  `calculateInvoice` forces 0% and skips the whole-rupee round-off, the PDF
+  says "INVOICE" instead of "TAX INVOICE" and drops the GST columns/breakup,
+  and the amount-in-words switches to the international scale
+  ("US Dollars … Cents"). Tax-free invoices are numbered in their own series
+  (`usdInvoiceNumberFormat`, default `TG/EXP/{FY}/{seq}`, its own sequence
+  counter) so the domestic GST sequence stays gapless. Money is still stored
+  as integer minor units — cents and paise are both 1/100.
+- **Dashboard** (`app/(app)/page.tsx`, `lib/dashboard.ts`): filterable by
+  period (presets + custom range), client, currency and status via URL
+  search params. `lib/dashboard.ts` holds the pure range-resolver and
+  aggregation (per-currency invoiced/received/outstanding/overdue, per-client
+  rollup, gap-filled monthly series); the page only queries and renders.
+  Mixed currencies are never summed — each currency gets its own stat block
+  and Recharts bar chart.
 - **GST calculation** (`lib/invoice-calc.ts`): pure function, `decimal.js`
   used only as scratch space for qty × rate / percentage math — every value
   crossing a function boundary is integer paise. Same-state → CGST+SGST
@@ -241,7 +263,8 @@ Invoices are immutable once `SENT`. Corrections happen via cancel + re-issue
 - [x] Schema + migrations + seed + auth + settings
 - [x] Clients + invoice builder + state machine + PDF + public page + email send
 - [x] DSC (Digital Signature Certificate) PDF signing — see [local-signer/README.md](local-signer/README.md)
-- [ ] Invoice list/detail + manual payments + dashboard
+- [x] USD (tax-free) billing + filterable dashboard (revenue / receivables / by-client)
+- [ ] Invoice list/detail + manual payments
 - [ ] Razorpay links + webhooks + reminders
 - [ ] Recurring + quotations + credit notes + reports
 

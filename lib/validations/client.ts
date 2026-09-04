@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { gstStateCodeSchema, optionalGstinSchema } from "./common";
+import { CURRENCY_CODES } from "@/lib/money";
 
 function optionalTrimmed() {
   return z
@@ -27,7 +28,9 @@ export const clientSchema = z.object({
     .optional()
     .transform((v) => (v ? v : undefined)),
   pincode: optionalTrimmed(),
-  currency: z.string().trim().min(1).default("INR"),
+  currency: z
+    .enum(CURRENCY_CODES as [string, ...string[]])
+    .default("INR"),
   notes: optionalTrimmed(),
 });
 

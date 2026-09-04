@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/session";
 import { invoiceSchema } from "@/lib/validations/invoice";
 import { calculateInvoice } from "@/lib/invoice-calc";
-import { rupeesToPaise } from "@/lib/money";
+import { rupeesToPaise, isTaxableCurrency } from "@/lib/money";
 
 export async function GET(
   _request: Request,
@@ -75,18 +75,24 @@ export async function PUT(
     );
   }
 
+  // Non-INR invoices are billed tax-free — pin every line to 0% up front so
+  // what's stored matches what `calculateInvoice` computes.
+  const taxExempt = !isTaxableCurrency(input.currency);
+  const effectiveIsExport = taxExempt ? false : input.isExport;
+
   let calc;
   try {
     calc = calculateInvoice({
       sellerStateCode: businessProfile.stateCode,
       placeOfSupplyStateCode: input.placeOfSupplyStateCode,
-      isExport: input.isExport,
+      isExport: effectiveIsExport,
+      currency: input.currency,
       overallDiscountPaise: rupeesToPaise(input.overallDiscount),
       lineItems: input.lineItems.map((li) => ({
         quantity: li.quantity,
         ratePaise: rupeesToPaise(li.rate),
         discountPercent: li.discountPercent,
-        taxRatePercent: li.taxRatePercent,
+        taxRatePercent: taxExempt ? "0" : li.taxRatePercent,
       })),
     });
   } catch (error) {
@@ -106,7 +112,7 @@ export async function PUT(
         unit: li.unit,
         ratePaise: rupeesToPaise(li.rate),
         discountPercent: li.discountPercent,
-        taxRatePercent: li.taxRatePercent,
+        taxRatePercent: taxExempt ? "0" : li.taxRatePercent,
         taxableValuePaise: calc.lineItems[index].taxableValuePaise,
         lineTotalPaise: calc.lineItems[index].lineTotalPaise,
         sortOrder: index,
@@ -120,7 +126,8 @@ export async function PUT(
         issueDate: new Date(input.issueDate),
         dueDate: new Date(input.dueDate),
         placeOfSupplyStateCode: input.placeOfSupplyStateCode,
-        isExport: input.isExport,
+        currency: input.currency,
+        isExport: effectiveIsExport,
         notes: input.notes,
         terms: input.terms,
         subtotalPaise: calc.subtotalPaise,
