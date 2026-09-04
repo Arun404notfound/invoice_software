@@ -36,7 +36,7 @@ npm run desktop:mac
 
 This runs three steps:
 
-1. `desktop:icon` – renders `build/icon.svg` → `build/icon.png`
+1. `desktop:icon` – generates `build/icon.png` (from artwork inlined in the script)
 2. `build:standalone` – `next build` with `output: standalone`, then copies
    `.next/static` + `public/` into `.next/standalone/` and strips any `.env`
 3. `electron-builder --mac` – packages everything into `dist/`
